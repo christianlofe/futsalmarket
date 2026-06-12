@@ -137,7 +137,7 @@ st.sidebar.markdown(f"👤 {st.session_state['email']}")
 st.sidebar.markdown("---")
 
 
-    menu = st.sidebar.radio(
+menu = st.sidebar.radio(
     "Menú de Operaciones",
     ["📈 Panel de Control", "🔍 Scouting & Estadísticas", "📝 Ventanilla de Traspasos", "📥 Buzón de Ofertas", "➕ Registrar Jugador"]
 
