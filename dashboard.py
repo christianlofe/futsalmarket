@@ -134,9 +134,9 @@ if st.session_state.get('rol') == 'admin':
         if not df_clubes.empty:
             col1, col2 = st.columns(2)
             with col1:
-                st.metric("Masa Monetaria CIF Total", f"{df_clubes['FcFCoin_saldo'].sum():,} 🪙")
+                st.metric("Masa Monetaria € Total", f"{df_clubes['FcFCoin_saldo'].sum():,} ")
             with col2:
-                st.metric("Fondo FGS Total", f"{df_clubes['PlayerCoin_saldo'].sum():,} 💎")
+                st.metric("Fondo € Total", f"{df_clubes['PlayerCoin_saldo'].sum():,} ")
 
     except Exception as e:
         st.error(f"Error cargando panel admin: {e}")
@@ -176,8 +176,8 @@ if st.session_state.get('rol') == 'jugador':
                     col_info, col_acciones = st.columns([3, 1])
                     with col_info:
                         st.subheader(f"Oferta de {o['nombre_comprador']}")
-                        st.markdown(f"💰 **Derechos al club:** `{o['oferta_cif']:,} CIF`")
-                        st.markdown(f"💎 **Tu salario garantizado:** `{o['oferta_fgs']:,} FGS`")
+                        st.markdown(f"💰 **Derechos al club:** `{o['oferta_cif']:,} €`")
+                        st.markdown(f" **Tu salario garantizado:** `{o['oferta_fgs']:,} €`")
                     with col_acciones:
                         st.markdown("<br>", unsafe_allow_html=True)
                         col_si, col_no = st.columns(2)
@@ -235,9 +235,9 @@ if menu == "📈 Panel de Control":
     try:
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric(label="Créditos de Fichaje (CIF)", value=f"{club_activo['FcFCoin_saldo']:,} 🪙")
+            st.metric(label="Créditos de Fichaje (€)", value=f"{club_activo['FcFCoin_saldo']:,} ")
         with col2:
-            st.metric(label="Fondo Salarial (FGS)", value=f"{club_activo['PlayerCoin_saldo']:,} 💎")
+            st.metric(label="Fondo Salarial (€)", value=f"{club_activo['PlayerCoin_saldo']:,} ")
         with col3:
             jugadores_count = supabase.table("jugadores").select("id").eq("club_id", club_id).execute().data
             st.metric(label="Jugadores en Plantilla", value=len(jugadores_count))
@@ -288,7 +288,7 @@ elif menu == "🔍 Scouting & Estadísticas":
                         st.subheader(j['nombre'])
                         club_pertenece = next((name for name, c in nombres_clubes.items() if c['id'] == j['club_id']), "Sin Club")
                         st.markdown(f"**Club:** {club_pertenece}")
-                        st.markdown(f"💰 **Valor:** `{valor:,} CIF`")
+                        st.markdown(f"💰 **Valor:** `{valor:,} €`")
                     with col_stats:
                         st.markdown("**Estadísticas de Temporada:**")
                         c1, c2, c3, c4 = st.columns(4)
@@ -317,17 +317,17 @@ elif menu == "📝 Ventanilla de Traspasos":
             jugador_id = next(j['id'] for j in jugadores if j['nombre'] == jugador_sel)
             col1, col2 = st.columns(2)
             with col1:
-                precio_cif = st.number_input("Derechos de Transferencia al Club (CIF 🪙)", min_value=0, value=2000, step=500)
+                precio_cif = st.number_input("Derechos de Transferencia al Club (€ )", min_value=0, value=2000, step=500)
             with col2:
-                salario_fgs = st.number_input("Garantía Salarial al Jugador (FGS 💎)", min_value=0, value=800, step=100)
+                salario_fgs = st.number_input("Garantía Salarial al Jugador (€ )", min_value=0, value=800, step=100)
             st.markdown("---")
-            st.info(f"**Resumen:** Oferta al **{club_vendedor_nombre}** por **{jugador_sel}** · {precio_cif:,} CIF al club + {salario_fgs:,} FGS al jugador.")
+            st.info(f"**Resumen:** Oferta al **{club_vendedor_nombre}** por **{jugador_sel}** · {precio_cif:,} € al club + {salario_fgs:,} € al jugador.")
             if st.button("Enviar Propuesta de Fichaje", use_container_width=True):
                 club_comprador_full = supabase.table("clubes").select("*").eq("id", club_activo['id']).execute().data[0]
                 if club_comprador_full['FcFCoin_saldo'] < precio_cif:
-                    st.error("❌ No tienes suficientes CIF para esta oferta.")
+                    st.error("❌ No tienes suficientes € para esta oferta.")
                 elif club_comprador_full['PlayerCoin_saldo'] < salario_fgs:
-                    st.error("❌ No tienes suficiente FGS para avalar el sueldo.")
+                    st.error("❌ No tienes suficiente € para avalar el sueldo.")
                 else:
                     supabase.table("ofertas_fichaje").insert({
                         "jugador_id": jugador_id,
@@ -370,7 +370,7 @@ elif menu == "📥 Buzón de Ofertas":
                     with col_detalles:
                         st.subheader(f"Oferta por {jugador_nombre}")
                         st.markdown(f"🏢 **Club Interesado:** {club_comprador}")
-                        st.markdown(f"💰 **Derechos:** `{cif_ofrecido:,} CIF` | 💎 **Sueldo:** `{fgs_ofrecido:,} FGS`")
+                        st.markdown(f"💰 **Derechos:** `{cif_ofrecido:,} €` |  **Sueldo:** `{fgs_ofrecido:,} €`")
                         st.success("✅ Jugador ha aceptado — pendiente confirmación del club")
                     with col_acciones:
                         st.markdown("<br>", unsafe_allow_html=True)
