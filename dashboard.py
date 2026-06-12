@@ -62,6 +62,86 @@ if not st.session_state['logueado']:
     login()
     st.stop()
 
+# --- PORTAL ADMIN / FCF ---
+if st.session_state.get('rol') == 'admin':
+    st.sidebar.title("⚽ FutsalMarket")
+    st.sidebar.markdown("### 🛡️ Panel FCF / Admin")
+    st.sidebar.markdown(f"📧 {st.session_state['email']}")
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
+        st.session_state.clear()
+        st.rerun()
+
+    st.title("🛡️ Panel de Control FCF")
+    st.markdown("---")
+
+    try:
+        clubes = supabase.table("clubes").select("*").execute().data
+        pagos = supabase.table("pagos_clubes").select("*").execute().data
+
+        # Unir clubes con su estado de pago
+        pagos_dict = {p['club_id']: p for p in pagos}
+
+        # Métricas generales
+        total_clubes = len(clubes)
+        pagados = sum(1 for p in pagos if p['estado'] == 'pagado')
+        pendientes = sum(1 for p in pagos if p['estado'] == 'pendiente')
+        atrasados = sum(1 for p in pagos if p['estado'] == 'atrasado')
+
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Total Clubs", total_clubes)
+        col2.metric("✅ Pagados", pagados)
+        col3.metric("⏳ Pendientes", pendientes)
+        col4.metric("🔴 Atrasados", atrasados)
+
+        st.markdown("---")
+        st.markdown("### 📋 Estado de Clubs")
+
+        for c in clubes:
+            pago = pagos_dict.get(c['id'], {})
+            estado = pago.get('estado', 'sin datos')
+            plan = pago.get('plan', '-')
+
+            color = {"pagado": "🟢", "pendiente": "🟡", "atrasado": "🔴"}.get(estado, "⚪")
+
+            with st.container():
+                col_nombre, col_estado, col_plan, col_accion = st.columns([3, 2, 2, 2])
+                with col_nombre:
+                    st.markdown(f"**{c['nombre']}**")
+                with col_estado:
+                    st.markdown(f"{color} {estado.capitalize()}")
+                with col_plan:
+                    st.markdown(f"Plan: {plan}")
+                with col_accion:
+                    nuevo_estado = st.selectbox(
+                        "Cambiar estado",
+                        ["pendiente", "pagado", "atrasado"],
+                        index=["pendiente", "pagado", "atrasado"].index(estado) if estado in ["pendiente", "pagado", "atrasado"] else 0,
+                        key=f"estado_{c['id']}",
+                        label_visibility="collapsed"
+                    )
+                    if nuevo_estado != estado:
+                        if pago:
+                            supabase.table("pagos_clubes").update({"estado": nuevo_estado}).eq("club_id", c['id']).execute()
+                        else:
+                            supabase.table("pagos_clubes").insert({"club_id": c['id'], "estado": nuevo_estado, "plan": "basic"}).execute()
+                        st.rerun()
+            st.markdown("<hr style='margin: 5px 0;'>", unsafe_allow_html=True)
+
+        st.markdown("---")
+        st.markdown("### 💰 Resumen Económico Global")
+        df_clubes = pd.DataFrame(clubes)
+        if not df_clubes.empty:
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Masa Monetaria CIF Total", f"{df_clubes['FcFCoin_saldo'].sum():,} 🪙")
+            with col2:
+                st.metric("Fondo FGS Total", f"{df_clubes['PlayerCoin_saldo'].sum():,} 💎")
+
+    except Exception as e:
+        st.error(f"Error cargando panel admin: {e}")
+
+    st.stop()
 # --- PORTAL DEL JUGADOR ---
 if st.session_state.get('rol') == 'jugador':
     jugador_nombre = st.session_state.get('jugador_nombre', 'Jugador')
