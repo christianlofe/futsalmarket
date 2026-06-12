@@ -136,9 +136,11 @@ st.sidebar.markdown(f"### 🏢 {club_activo_nombre}")
 st.sidebar.markdown(f"👤 {st.session_state['email']}")
 st.sidebar.markdown("---")
 
-menu = st.sidebar.radio(
+
+    menu = st.sidebar.radio(
     "Menú de Operaciones",
-    ["📈 Panel de Control", "🔍 Scouting & Estadísticas", "📝 Ventanilla de Traspasos", "📥 Buzón de Ofertas"]
+    ["📈 Panel de Control", "🔍 Scouting & Estadísticas", "📝 Ventanilla de Traspasos", "📥 Buzón de Ofertas", "➕ Registrar Jugador"]
+
 )
 
 if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
@@ -319,5 +321,45 @@ elif menu == "📥 Buzón de Ofertas":
     except Exception as e:
         st.error(f"Error al cargar el buzón: {e}")
 
+# --- REGISTRAR JUGADOR ---
+elif menu == "➕ Registrar Jugador":
+    st.title("➕ Registrar Nuevo Jugador")
+    st.markdown(f"Club: **{club_activo_nombre}**")
+    st.markdown("---")
+
+    with st.form("form_jugador"):
+        nombre = st.text_input("Nombre completo del jugador")
+        posicion = st.selectbox("Posición", ["Portero", "Cierre", "Ala", "Pivot"])
+        email = st.text_input("Email del jugador (opcional)")
+        goles = st.number_input("Goles esta temporada", min_value=0, value=0)
+        asistencias = st.number_input("Asistencias esta temporada", min_value=0, value=0)
+        partidos = st.number_input("Partidos jugados", min_value=0, value=0)
+        amarillas = st.number_input("Tarjetas amarillas", min_value=0, value=0)
+        rojas = st.number_input("Tarjetas rojas", min_value=0, value=0)
+
+        submitted = st.form_submit_button("Registrar Jugador", use_container_width=True)
+
+        if submitted:
+            if not nombre:
+                st.error("❌ El nombre es obligatorio.")
+            else:
+                try:
+                    valor = (goles * 200) + (asistencias * 150) + 1000
+                    supabase.table("jugadores").insert({
+                        "nombre": nombre,
+                        "posicion": posicion,
+                        "club_id": club_id,
+                        "email": email if email else None,
+                        "goles": goles,
+                        "asistencias": asistencias,
+                        "partidos_jugados": partidos,
+                        "tarjetas_amarillas": amarillas,
+                        "tarjetas_rojas": rojas,
+                        "valor_mercado": valor,
+                    }).execute()
+                    st.success(f"✅ {nombre} registrado correctamente en {club_activo_nombre}.")
+                    st.balloons()
+                except Exception as e:
+                    st.error(f"Error al registrar jugador: {e}")
 st.sidebar.markdown("---")
 st.sidebar.caption("FutsalMarket Catalunya v2.0")
