@@ -138,8 +138,8 @@ st.sidebar.markdown("---")
 
 
 menu = st.sidebar.radio(
-    "Menú de Operaciones",
-    ["📈 Panel de Control", "🔍 Scouting & Estadísticas", "📝 Ventanilla de Traspasos", "📥 Buzón de Ofertas", "➕ Registrar Jugador"]
+    "Menú de Operaciones",["📈 Panel de Control", "🔍 Scouting & Estadísticas", "📝 Ventanilla de Traspasos", "📥 Buzón de Ofertas", "➕ Registrar Jugador", "🧑‍💼 Cuerpo Técnico"]
+    
 
 )
 
@@ -361,5 +361,58 @@ elif menu == "➕ Registrar Jugador":
                     st.balloons()
                 except Exception as e:
                     st.error(f"Error al registrar jugador: {e}")
+# --- CUERPO TÉCNICO ---
+elif menu == "🧑‍💼 Cuerpo Técnico":
+    st.title("🧑‍💼 Cuerpo Técnico")
+    st.markdown(f"Club: **{club_activo_nombre}**")
+    st.markdown("---")
+
+    tab_lista, tab_nuevo = st.tabs(["📋 Plantilla Técnica", "➕ Registrar Nuevo"])
+
+    with tab_lista:
+        try:
+            tecnicos = supabase.table("cuerpo_tecnico").select("*").eq("club_id", club_id).execute().data
+            if tecnicos:
+                df = pd.DataFrame(tecnicos)
+                columnas = ['nombre', 'cargo', 'salario_mensual']
+                columnas = [c for c in columnas if c in df.columns]
+                st.dataframe(df[columnas].rename(columns={
+                    'nombre': 'Nombre',
+                    'cargo': 'Cargo',
+                    'salario_mensual': 'Salario Mensual (€)'
+                }), use_container_width=True)
+
+                total_mensual = df['salario_mensual'].sum() if 'salario_mensual' in df.columns else 0
+                st.metric("💰 Total fichas técnicas/mes", f"{total_mensual:,} €")
+            else:
+                st.info("No tienes cuerpo técnico registrado todavía.")
+        except Exception as e:
+            st.error(f"Error cargando cuerpo técnico: {e}")
+
+    with tab_nuevo:
+        with st.form("form_tecnico"):
+            nombre = st.text_input("Nombre completo")
+            cargo = st.selectbox("Cargo", ["Primer Entrenador", "Segundo Entrenador", "Delegado", "Auxiliar"])
+            salario = st.number_input("Salario mensual (€)", min_value=0, value=0, step=50)
+            email = st.text_input("Email (opcional)")
+
+            submitted = st.form_submit_button("Registrar", use_container_width=True)
+
+            if submitted:
+                if not nombre:
+                    st.error("❌ El nombre es obligatorio.")
+                else:
+                    try:
+                        supabase.table("cuerpo_tecnico").insert({
+                            "nombre": nombre,
+                            "cargo": cargo,
+                            "club_id": club_id,
+                            "salario_mensual": salario,
+                            "email": email if email else None,
+                        }).execute()
+                        st.success(f"✅ {nombre} registrado como {cargo}.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error al registrar: {e}")
 st.sidebar.markdown("---")
 st.sidebar.caption("FutsalMarket Catalunya v2.0")
