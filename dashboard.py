@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from datetime import date, timedelta
 import os
 from supabase import create_client
 from dotenv import load_dotenv
@@ -157,6 +158,23 @@ if st.session_state.get('rol') == 'jugador':
         st.rerun()
 
     st.title(f"👤 Portal de {jugador_nombre}")
+    st.markdown("---")
+    st.subheader("📄 Mi Contrato")
+    try:
+        contratos = supabase.table("contratos").select("*").eq("jugador_id", jugador_id).eq("estado", "activo").execute().data
+        if contratos:
+            for c in contratos:
+                club_c = supabase.table("clubes").select("nombre").eq("id", c['club_id']).execute().data
+                nombre_club = club_c[0]['nombre'] if club_c else "Desconocido"
+                st.success(f"✅ Contrato activo con **{nombre_club}**")
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Temporada", c['temporada'])
+                col2.metric("Ficha mensual", f"{c['salario_mensual']:,} €")
+                col3.metric("Vigente hasta", c['fecha_fin'])
+        else:
+            st.info("No tienes contrato activo registrado.")
+    except Exception as e:
+        st.error(f"Error cargando contrato: {e}")
     st.markdown("---")
     st.subheader("📥 Ofertas de Fichaje Recibidas")
 
@@ -389,6 +407,15 @@ elif menu == "📥 Buzón de Ofertas":
                                 }).eq("id", vendedor_full['id']).execute()
                                 supabase.table("jugadores").update({"club_id": comprador_full['id']}).eq("id", o['jugador_id']).execute()
                                 supabase.table("ofertas_fichaje").update({"estado": "completada"}).eq("id", o['id']).execute()
+                                supabase.table("contratos").insert({
+                                    "jugador_id": o['jugador_id'],
+                                    "club_id": comprador_full['id'],
+                                    "salario_mensual": fgs_ofrecido,
+                                    "temporada": "2025-2026",
+                                    "fecha_inicio": str(date.today()),
+                                    "fecha_fin": str(date.today() + timedelta(days=365)),
+                                    "estado": "activo"
+                                }).execute()
                                 st.success(f"🎉 ¡Fichaje completado! {jugador_nombre} se incorpora a {club_comprador}.")
                                 st.balloons()
                                 st.rerun()
