@@ -10,6 +10,7 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 st.set_page_config(page_title="FutsalMarket Catalunya", layout="wide", page_icon="⚽")
+st.logo("logo.png")
 
 @st.cache_resource
 def get_supabase():
