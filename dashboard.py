@@ -144,7 +144,7 @@ if st.session_state.get('rol') == 'admin':
         st.error(f"Error cargando panel admin: {e}")
 
     st.stop()
-# --- PORTAL DEL JUGADOR ---
+    # --- PORTAL DEL JUGADOR ---
 if st.session_state.get('rol') == 'jugador':
     jugador_nombre = st.session_state.get('jugador_nombre', 'Jugador')
     jugador_id = st.session_state.get('jugador_id')
@@ -212,6 +212,174 @@ if st.session_state.get('rol') == 'jugador':
                 st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
     except Exception as e:
         st.error(f"Error cargando ofertas: {e}")
+    st.stop()
+    # --- PORTAL DEL DELEGADO ---
+if st.session_state.get('rol') == 'delegado':
+    club_id = st.session_state['club_id']
+    club_data = supabase.table("clubes").select("*").eq("id", club_id).execute().data[0]
+    club_nombre = club_data['nombre']
+
+    st.sidebar.title("⚽ FutsalMarket")
+    st.sidebar.markdown(f"### 📋 Delegado")
+    st.sidebar.markdown(f"🏢 {club_nombre}")
+    st.sidebar.markdown(f"📧 {st.session_state['email']}")
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
+        st.session_state.clear()
+        st.rerun()
+
+    st.title("📋 Acta Virtual")
+    st.markdown("---")
+
+    # --- INICIAR PARTIDO ---
+    if 'partido_activo_id' not in st.session_state:
+        st.subheader("🆕 Iniciar Nuevo Partido")
+        nombre_rival = st.text_input("Nombre del equipo rival")
+        fecha_partido = st.date_input("Fecha del partido", value=date.today())
+
+        if st.button("▶️ Iniciar Partido", use_container_width=True):
+            if not nombre_rival:
+                st.error("❌ Introduce el nombre del equipo rival.")
+            else:
+                nuevo = supabase.table("partidos").insert({
+                    "club_local_id": club_id,
+                    "nombre_rival": nombre_rival,
+                    "fecha": str(fecha_partido),
+                    "estado": "en_curso",
+                    "goles_local": 0,
+                    "goles_rival": 0
+                }).execute().data[0]
+                st.session_state['partido_activo_id'] = nuevo['id']
+                st.session_state['nombre_rival'] = nombre_rival
+                st.rerun()
+        st.stop()
+
+    # --- PARTIDO EN CURSO ---
+    partido_id = st.session_state['partido_activo_id']
+    nombre_rival = st.session_state.get('nombre_rival', 'Rival')
+
+    partido = supabase.table("partidos").select("*").eq("id", partido_id).execute().data[0]
+    goles_local = partido['goles_local']
+    goles_rival = partido['goles_rival']
+
+    # Marcador
+    col_l, col_m, col_r = st.columns([2, 1, 2])
+    with col_l:
+        st.markdown(f"<h2 style='text-align:center'>{club_nombre}</h2>", unsafe_allow_html=True)
+    with col_m:
+        st.markdown(f"<h1 style='text-align:center'>{goles_local} — {goles_rival}</h1>", unsafe_allow_html=True)
+    with col_r:
+        st.markdown(f"<h2 style='text-align:center'>{nombre_rival}</h2>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    # Tabs equipo local vs rival
+    tab_local, tab_rival, tab_eventos = st.tabs([f"🏠 {club_nombre}", f"✈️ {nombre_rival}", "📜 Eventos"])
+
+    EVENTOS = ["⚽ Gol", "🧤 Gol Encajado", "🟨 Amarilla", "🟥 Roja", "👟 Falta", "🔵 Corner", "🎯 Penalti", "❌ Tiro Fallado"]
+
+    # --- TAB EQUIPO LOCAL ---
+    with tab_local:
+        jugadores_local = supabase.table("jugadores").select("id, nombre, posicion").eq("club_id", club_id).execute().data
+
+        if not jugadores_local:
+            st.warning("No hay jugadores registrados en tu plantilla.")
+        else:
+            eventos_partido = supabase.table("acta_eventos").select("*").eq("partido_id", partido_id).eq("equipo", "local").execute().data
+
+            jugador_sel_nombre = st.selectbox(
+                "👤 Selecciona jugador para registrar evento",
+                [j['nombre'] for j in jugadores_local],
+                key="select_jugador_local"
+            )
+            jugador_sel = next(j for j in jugadores_local if j['nombre'] == jugador_sel_nombre)
+
+            st.markdown(f"#### Registrar evento para **{jugador_sel['nombre']}** ({jugador_sel['posicion']})")
+            cols = st.columns(4)
+            for idx, evento in enumerate(EVENTOS):
+                col = cols[idx % 4]
+                if col.button(evento, key=f"local_{jugador_sel['id']}_{evento}", use_container_width=True):
+                    tipo_limpio = evento.split(" ", 1)[1].lower().replace(" ", "_")
+                    supabase.table("acta_eventos").insert({
+                        "partido_id": partido_id,
+                        "jugador_id": jugador_sel['id'],
+                        "equipo": "local",
+                        "tipo": tipo_limpio,
+                    }).execute()
+                    if tipo_limpio == "gol":
+                        supabase.table("partidos").update({"goles_local": goles_local + 1}).eq("id", partido_id).execute()
+                    st.success(f"✅ {evento} → {jugador_sel['nombre']}")
+                    st.rerun()
+
+            st.markdown("---")
+            st.markdown("#### 📊 Resumen del partido — Tu equipo")
+            resumen = {}
+            for j in jugadores_local:
+                eventos_jugador = [e for e in eventos_partido if e['jugador_id'] == j['id']]
+                resumen[j['nombre']] = {
+                    "Goles": sum(1 for e in eventos_jugador if e['tipo'] == 'gol'),
+                    "Goles Encajados": sum(1 for e in eventos_jugador if e['tipo'] == 'gol_encajado'),
+                    "🟨": sum(1 for e in eventos_jugador if e['tipo'] == 'amarilla'),
+                    "🟥": sum(1 for e in eventos_jugador if e['tipo'] == 'roja'),
+                }
+            df_resumen = pd.DataFrame(resumen).T
+            st.dataframe(df_resumen, use_container_width=True)
+
+    # --- TAB EQUIPO RIVAL ---
+    with tab_rival:
+        st.markdown("#### Jugadores del equipo rival")
+
+        # Añadir jugador rival al vuelo
+        with st.expander("➕ Añadir jugador rival"):
+            nombre_nuevo = st.text_input("Nombre del jugador rival", key="nuevo_rival")
+            if st.button("Añadir", key="btn_add_rival"):
+                if nombre_nuevo:
+                    supabase.table("jugadores_rivales").insert({
+                        "nombre": nombre_nuevo,
+                        "partido_id": partido_id
+                    }).execute()
+                    st.rerun()
+
+        jugadores_rival = supabase.table("jugadores_rivales").select("*").eq("partido_id", partido_id).execute().data
+
+        if not jugadores_rival:
+            st.info("Añade jugadores del equipo rival para registrar eventos.")
+        else:
+            for j in jugadores_rival:
+                with st.expander(f"**{j['nombre']}**"):
+                    cols = st.columns(len(EVENTOS))
+                    for idx, evento in enumerate(EVENTOS):
+                        if cols[idx].button(evento, key=f"rival_{j['id']}_{evento}"):
+                            tipo_limpio = evento.split(" ", 1)[1].lower().replace(" ", "_")
+                            supabase.table("acta_eventos").insert({
+                                "partido_id": partido_id,
+                                "jugador_rival_nombre": j['nombre'],
+                                "equipo": "rival",
+                                "tipo": tipo_limpio,
+                            }).execute()
+                            if tipo_limpio == "gol":
+                                supabase.table("partidos").update({"goles_rival": goles_rival + 1}).eq("id", partido_id).execute()
+                            st.success(f"✅ {evento} registrado para {j['nombre']}")
+                            st.rerun()
+
+    # --- TAB EVENTOS ---
+    with tab_eventos:
+        st.markdown("#### 📜 Registro de eventos del partido")
+        eventos = supabase.table("acta_eventos").select("*").eq("partido_id", partido_id).execute().data
+        if eventos:
+            df_eventos = pd.DataFrame(eventos)
+            st.dataframe(df_eventos[['equipo', 'tipo', 'jugador_id', 'jugador_rival_nombre']], use_container_width=True)
+        else:
+            st.info("Aún no hay eventos registrados.")
+
+    st.markdown("---")
+    if st.button("🏁 Finalizar Partido", use_container_width=True, type="primary"):
+        supabase.table("partidos").update({"estado": "finalizado"}).eq("id", partido_id).execute()
+        del st.session_state['partido_activo_id']
+        del st.session_state['nombre_rival']
+        st.success("✅ Partido finalizado y acta guardada.")
+        st.balloons()
+        st.rerun()
+
     st.stop()
 
 # --- APP PRINCIPAL PARA CLUBS ---
@@ -289,12 +457,8 @@ elif menu == "🔍 Scouting & Estadísticas":
         if jugadores:
             for j in jugadores:
                 posicion = j.get("posicion", "Ala")
-                goles = j.get("goles", hash(j['nombre']) % 18 + 2)
-                asistencias = j.get("asistencias", hash(j['nombre']) % 12 + 1)
-                partidos = j.get("partidos_jugados", hash(j['nombre']) % 10 + 12)
-                amarillas = j.get("tarjetas_amarillas", hash(j['nombre']) % 4)
-                rojas = j.get("tarjetas_rojas", 1 if (hash(j['nombre']) % 15 == 0) else 0)
-                valor = j.get("valor_mercado", (goles * 200) + (asistencias * 150) + 1000)
+                goles = j.get("goles", 0)
+                valor = j.get("valor_mercado", 0)
                 with st.container():
                     col_foto, col_info, col_stats = st.columns([1, 2, 4])
                     with col_foto:
@@ -309,13 +473,10 @@ elif menu == "🔍 Scouting & Estadísticas":
                         st.markdown(f"**Club:** {club_pertenece}")
                         st.markdown(f"💰 **Valor:** `{valor:,} €`")
                     with col_stats:
-                        st.markdown("**Estadísticas de Temporada:**")
-                        c1, c2, c3, c4 = st.columns(4)
-                        c1.metric("Partidos", partidos)
-                        c2.metric("Goles ⚽", goles)
-                        c3.metric("Asistencias", asistencias)
-                        c4.metric("Tarjetas 🟨/🟥", f"{amarillas}/{rojas}")
-                st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
+                        st.markdown("**Estadísticas:**")
+                        c1, c2 = st.columns(2)
+                        c1.metric("Goles ⚽", goles)
+                        c2.metric("Valor de mercado", f"{valor:,} €")
         else:
             st.info("No hay jugadores registrados.")
     except Exception as e:
@@ -439,12 +600,7 @@ elif menu == "➕ Registrar Jugador":
         nombre = st.text_input("Nombre completo del jugador")
         posicion = st.selectbox("Posición", ["Portero", "Cierre", "Ala", "Pivot"])
         email = st.text_input("Email del jugador (opcional)")
-        goles = st.number_input("Goles esta temporada", min_value=0, value=0)
-        asistencias = st.number_input("Asistencias esta temporada", min_value=0, value=0)
-        partidos = st.number_input("Partidos jugados", min_value=0, value=0)
-        amarillas = st.number_input("Tarjetas amarillas", min_value=0, value=0)
-        rojas = st.number_input("Tarjetas rojas", min_value=0, value=0)
-
+        valor_mercado = st.number_input("Valor de mercado (€)", min_value=0, value=0, step=100)
         submitted = st.form_submit_button("Registrar Jugador", use_container_width=True)
 
         if submitted:
@@ -452,23 +608,19 @@ elif menu == "➕ Registrar Jugador":
                 st.error("❌ El nombre es obligatorio.")
             else:
                 try:
-                    valor = (goles * 200) + (asistencias * 150) + 1000
                     supabase.table("jugadores").insert({
                         "nombre": nombre,
                         "posicion": posicion,
                         "club_id": club_id,
                         "email": email if email else None,
-                        "goles": goles,
-                        "asistencias": asistencias,
-                        "partidos_jugados": partidos,
-                        "tarjetas_amarillas": amarillas,
-                        "tarjetas_rojas": rojas,
-                        "valor_mercado": valor,
+                        "goles": 0,
+                        "valor_mercado": valor_mercado,
                     }).execute()
                     st.success(f"✅ {nombre} registrado correctamente en {club_activo_nombre}.")
                     st.balloons()
                 except Exception as e:
                     st.error(f"Error al registrar jugador: {e}")
+
 # --- CUERPO TÉCNICO ---
 elif menu == "🧑‍💼 Cuerpo Técnico":
     st.title("🧑‍💼 Cuerpo Técnico")
@@ -522,5 +674,6 @@ elif menu == "🧑‍💼 Cuerpo Técnico":
                         st.rerun()
                     except Exception as e:
                         st.error(f"Error al registrar: {e}")
+
 st.sidebar.markdown("---")
 st.sidebar.caption("FutsalMarket Catalunya v2.0")
