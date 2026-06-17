@@ -233,6 +233,13 @@ if st.session_state.get('rol') == 'delegado':
 
     # --- INICIAR PARTIDO ---
     if 'partido_activo_id' not in st.session_state:
+        # Buscar si hay partido en curso en Supabase
+        partido_en_curso = supabase.table("partidos").select("*").eq("club_local_id", club_id).eq("estado", "en_curso").execute().data
+        if partido_en_curso:
+            st.session_state['partido_activo_id'] = partido_en_curso[0]['id']
+            st.session_state['nombre_rival'] = partido_en_curso[0]['nombre_rival']
+            st.rerun()
+
         st.subheader("🆕 Iniciar Nuevo Partido")
         nombre_rival = st.text_input("Nombre del equipo rival")
         fecha_partido = st.date_input("Fecha del partido", value=date.today())
@@ -373,14 +380,57 @@ if st.session_state.get('rol') == 'delegado':
 
     st.markdown("---")
     if st.button("🏁 Finalizar Partido", use_container_width=True, type="primary"):
-        supabase.table("partidos").update({"estado": "finalizado"}).eq("id", partido_id).execute()
-        del st.session_state['partido_activo_id']
-        del st.session_state['nombre_rival']
-        st.success("✅ Partido finalizado y acta guardada.")
-        st.balloons()
-        st.rerun()
+        try:
+            eventos_acta = supabase.table("acta_eventos").select("*").eq("partido_id", partido_id).eq("equipo", "local").execute().data
+            # ... resto del código
+            eventos_acta = supabase.table("acta_eventos").select("*").eq("partido_id", partido_id).eq("equipo", "local").execute().data
 
-    st.stop()
+            # 2. Agrupar eventos por jugador
+            from collections import defaultdict
+            stats_por_jugador = defaultdict(lambda: {"goles": 0, "tarjetas_amarillas": 0, "tarjetas_rojas": 0})
+            for evento in eventos_acta:
+                jid = evento.get("jugador_id")
+                if not jid:
+                    continue
+                tipo = evento.get("tipo", "")
+                if tipo == "gol":
+                    stats_por_jugador[jid]["goles"] += 1
+                elif tipo == "amarilla":
+                    stats_por_jugador[jid]["tarjetas_amarillas"] += 1
+                elif tipo == "roja":
+                    stats_por_jugador[jid]["tarjetas_rojas"] += 1
+
+            # 3. Actualizar jugadores
+            # Actualizar stats individuales (goles, tarjetas)
+            for jid, stats in stats_por_jugador.items():
+                jugador_actual = supabase.table("jugadores").select("goles, tarjetas_amarillas, tarjetas_rojas, partidos_jugados").eq("id", jid).execute().data
+                if jugador_actual:
+                    j = jugador_actual[0]
+                    supabase.table("jugadores").update({
+                        "goles": (j.get("goles") or 0) + stats["goles"],
+                        "tarjetas_amarillas": (j.get("tarjetas_amarillas") or 0) + stats["tarjetas_amarillas"],
+                        "tarjetas_rojas": (j.get("tarjetas_rojas") or 0) + stats["tarjetas_rojas"],
+                    }).eq("id", jid).execute()
+
+            # Sumar +1 partidos_jugados a TODOS los jugadores de la plantilla
+            todos_jugadores = supabase.table("jugadores").select("id, partidos_jugados").eq("club_id", club_id).execute().data
+            for j in todos_jugadores:
+                supabase.table("jugadores").update({
+                    "partidos_jugados": (j.get("partidos_jugados") or 0) + 1,
+                }).eq("id", j["id"]).execute()
+
+            # 4. Ahora sí finalizar partido
+            supabase.table("partidos").update({"estado": "finalizado"}).eq("id", partido_id).execute()
+            del st.session_state['partido_activo_id']
+            del st.session_state['nombre_rival']
+            st.success("✅ Partido finalizado. Estadísticas actualizadas.")
+            st.balloons()
+            st.rerun()
+
+        except Exception as e:
+            st.error(f"Error al finalizar el partido: {e}")
+
+    st.stop()  # ← AÑADIR ESTA LÍNEA
 
 # --- APP PRINCIPAL PARA CLUBS ---
 club_id = st.session_state['club_id']
@@ -471,12 +521,14 @@ elif menu == "🔍 Scouting & Estadísticas":
                         st.subheader(j['nombre'])
                         club_pertenece = next((name for name, c in nombres_clubes.items() if c['id'] == j['club_id']), "Sin Club")
                         st.markdown(f"**Club:** {club_pertenece}")
-                        st.markdown(f"💰 **Valor:** `{valor:,} €`")
+                        
                     with col_stats:
                         st.markdown("**Estadísticas:**")
-                        c1, c2 = st.columns(2)
-                        c1.metric("Goles ⚽", goles)
-                        c2.metric("Valor de mercado", f"{valor:,} €")
+                        c1, c2, c3, c4, c5 = st.columns(5)
+                        c1.metric("Partidos 🏟️", j.get("partidos_jugados", 0))
+                        c2.metric("Goles ⚽", j.get("goles", 0))
+                        c3.metric("Amarillas 🟨", j.get("tarjetas_amarillas", 0))
+                        c4.metric("Rojas 🟥", j.get("tarjetas_rojas", 0))
         else:
             st.info("No hay jugadores registrados.")
     except Exception as e:
