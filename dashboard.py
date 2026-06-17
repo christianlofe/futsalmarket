@@ -387,7 +387,7 @@ if st.session_state.get('rol') == 'delegado':
 
             # 2. Agrupar eventos por jugador
             from collections import defaultdict
-            stats_por_jugador = defaultdict(lambda: {"goles": 0, "tarjetas_amarillas": 0, "tarjetas_rojas": 0})
+            stats_por_jugador = defaultdict(lambda: {"goles": 0, "tarjetas_amarillas": 0, "tarjetas_rojas": 0, "goles_encajados": 0})
             for evento in eventos_acta:
                 jid = evento.get("jugador_id")
                 if not jid:
@@ -399,17 +399,20 @@ if st.session_state.get('rol') == 'delegado':
                     stats_por_jugador[jid]["tarjetas_amarillas"] += 1
                 elif tipo == "roja":
                     stats_por_jugador[jid]["tarjetas_rojas"] += 1
+                elif tipo == "gol_encajado":
+                    stats_por_jugador[jid]["goles_encajados"] += 1
 
             # 3. Actualizar jugadores
             # Actualizar stats individuales (goles, tarjetas)
             for jid, stats in stats_por_jugador.items():
-                jugador_actual = supabase.table("jugadores").select("goles, tarjetas_amarillas, tarjetas_rojas, partidos_jugados").eq("id", jid).execute().data
+                jugador_actual = supabase.table("jugadores").select("goles, tarjetas_amarillas, tarjetas_rojas, partidos_jugados, goles_encajados").eq("id", jid).execute().data
                 if jugador_actual:
                     j = jugador_actual[0]
                     supabase.table("jugadores").update({
                         "goles": (j.get("goles") or 0) + stats["goles"],
                         "tarjetas_amarillas": (j.get("tarjetas_amarillas") or 0) + stats["tarjetas_amarillas"],
                         "tarjetas_rojas": (j.get("tarjetas_rojas") or 0) + stats["tarjetas_rojas"],
+                        "goles_encajados": (j.get("goles_encajados") or 0) + stats["goles_encajados"],
                     }).eq("id", jid).execute()
 
             # Sumar +1 partidos_jugados a TODOS los jugadores de la plantilla
@@ -529,6 +532,8 @@ elif menu == "🔍 Scouting & Estadísticas":
                         c2.metric("Goles ⚽", j.get("goles", 0))
                         c3.metric("Amarillas 🟨", j.get("tarjetas_amarillas", 0))
                         c4.metric("Rojas 🟥", j.get("tarjetas_rojas", 0))
+                        if posicion.lower() == "portero":
+                            c5.metric("Encajados 🧤", j.get("goles_encajados", 0))
         else:
             st.info("No hay jugadores registrados.")
     except Exception as e:
